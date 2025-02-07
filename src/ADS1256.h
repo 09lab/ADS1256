@@ -1,4 +1,4 @@
-//ADS1256 header file
+// ADS1256 header file
 /*
  Name:		ADS1256.h
  Created:	2022/07/14
@@ -12,6 +12,7 @@
 
 #ifndef _ADS1256_h
 #define _ADS1256_h
+#include "Arduino.h"
 
 //Differential inputs
 #define DIFF_0_1 0b00000001 //A0 + A1 as differential input
@@ -100,12 +101,13 @@ class ADS1256
 public:
 
 	//Constructor
-	ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin, const byte CS_pin, float VREF);
+	ADS1256(float VREF, const byte DRDY_pin, const byte CS_pin,const byte SCK_pin, const byte MISO_pin, const byte MOSI_pin);
 	
 	//Initializing function
-	void InitializeADC();	
+	void InitializeADC();
+	void InitializeADC(uint8_t drate, uint8_t gain, bool buff_enable);
 	//ADS1256(int drate, int pga, int byteOrder, bool bufen);
-	
+	void InitSPI(float clockspdMhz);
 	//Read a register
 	long readRegister(uint8_t registerAddress);
 	
@@ -141,23 +143,37 @@ public:
 	
 	//Cycling through the differential inputs
 	long cycleDifferential(); //Ax + Ay
-		
+
+	// Get a single conversion with channel
+	long readSingleDifferential(uint8_t differential);
+
+	//
+	float readCurrentChannel(uint8_t differential);
+
 	//Converts the reading into a voltage value
 	float convertToVoltage(int32_t rawData);
 		
 	//Stop AD
 	void stopConversion();
+
+	void setConversationFactor(float val);
 	
 private:
-
+void CSON();
+void CSOFF();
 void waitForDRDY(); // Block until DRDY is low
+void read_uint24();
+long read_int32();
+float read_float32();
 
 float _VREF; //Value of the reference voltage
+float _spiClockMhz;
 //Pins
 byte _DRDY_pin; //Pin assigned for DRDY
-byte _RESET_pin; //Pin assigned for RESET
-byte _SYNC_pin; //Pin assigned for SYNC
 byte _CS_pin; //Pin assigned for CS
+byte _SCK_pin;
+byte _MISO_pin;
+byte _MOSI_pin;
 
 //Register-related variables
 uint8_t _registerAddress; //Value holding the address of the register we want to manipulate
@@ -173,6 +189,7 @@ byte _GPIO; //Value of the GPIO register
 byte _STATUS; //Value of the status register
 byte _GPIOvalue; //GPIO value
 byte _ByteOrder; //Byte order
+float _conversationFactor;
 
 byte _outputBuffer[3]; //3-byte (24-bit) buffer for the fast acquisition - Single-channel, continuous
 long _outputValue; //Combined value of the _outputBuffer[3]

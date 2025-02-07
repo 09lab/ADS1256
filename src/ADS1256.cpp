@@ -17,76 +17,77 @@
 #define convertSigned24BitToLong(value) ((value) & (1l << 23) ? (value) - 0x1000000 : value)
 
 //Constructor
-ADS1256::ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin, const byte CS_pin, float VREF)
+ADS1256::ADS1256(float VREF, const byte DRDY_pin, const byte CS_pin,const byte SCK_pin, const byte MISO_pin, const byte MOSI_pin)
 {
 	_DRDY_pin = DRDY_pin; 
 	pinMode(_DRDY_pin, INPUT);	
-	 
-	if(RESET_pin !=0)
-	{
-	_RESET_pin = RESET_pin;
-	pinMode(_RESET_pin, OUTPUT);
-	}
-	
-	if(SYNC_pin != 0)
-	{
-	_SYNC_pin = SYNC_pin;
-	pinMode(_SYNC_pin, OUTPUT);
-	}
-	
+
 	_CS_pin = CS_pin;
 	pinMode(_CS_pin, OUTPUT);
+
+	_SCK_pin = SCK_pin;
+	_MISO_pin = MISO_pin;
+	_MOSI_pin = MOSI_pin;
 	
 	_VREF = VREF;
+	_conversationFactor = 1.0;
 }
 	
+void ADS1256::InitSPI(float clockspdMhz) {
+	Serial.println("SPI Init: start");
 
+	_spiClockMhz = clockspdMhz;
+
+	SPI.begin(_SCK_pin, _MISO_pin, _MOSI_pin, _CS_pin);
+	delay(500);
+
+	SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
+	SPI.endTransaction();
+	Serial.println("SPI Init: end");
+}
+
+void ADS1256::InitializeADC(uint8_t drate, uint8_t gain, bool buff_enable)
+{
+	_PGA = 1 << gain;
+	CSON();
+	sendDirectCommand(SDATAC);
+	
+	setDRATE(drate);
+
+	uint8_t adcon = readRegister(ADCON_REG);
+	Serial.print("ADCON : ");
+	Serial.println(adcon, 2);
+
+	uint8_t bytemask = 0b00000111;
+	uint8_t byte2send = (adcon & ~bytemask) | gain;
+	writeRegister(ADCON_REG, byte2send);
+
+	if(buff_enable) {
+		uint8_t status = readRegister(STATUS_REG);
+		bitSet(status, 1);
+		writeRegister(STATUS_REG, status);
+	}
+
+	sendDirectCommand(SELFCAL);
+	waitForDRDY();
+	Serial.println("end Self Calibration");
+	
+	CSOFF();
+	_isAcquisitionRunning = false; //MCU will be waiting to start a continuous acquisition
+}
 //Initialization
 void ADS1256::InitializeADC()
 {
   //Chip select LOW  
-  digitalWrite(_CS_pin, LOW);
-  
-  //We do a manual chip reset on the ADS1256 - Datasheet Page 27/ RESET
-  if(_RESET_pin != 0)
-  {
-  digitalWrite(_RESET_pin, LOW);
-  delay(200);
-  digitalWrite(_RESET_pin, HIGH); //RESET is set to high
-  delay(1000);
-  }
-  
-  //Sync pin is also treated if it is defined
-  if(_SYNC_pin != 0)
-  {
-  digitalWrite(_SYNC_pin, HIGH); //RESET is set to high  
-  }
-	
-  SPI.begin();	    
-	
-  //Applying arbitrary default values to speed up the starting procedure if the user just want to get quick readouts
-  //We both pass values to the variables and then send those values to the corresponding registers
-  delay(200);
+  CSON();
 
-  _STATUS = 0b00110110; //BUFEN and ACAL enabled, Order is MSB, rest is read only
-  writeRegister(STATUS_REG, _STATUS); 
+  sendDirectCommand(SDATAC);
+  delay(200);
+  sendDirectCommand(SELFCAL); //Offset and self-gain calibration
   delay(200);
   
-  _MUX = 0b00000001; //MUX AIN0+AIN1
-  writeRegister(MUX_REG, _MUX); 
-  delay(200);
-  
-  _ADCON = 0b00000000; //ADCON - CLK: OFF, SDCS: OFF, PGA = 0 (+/- 5 V)
-  writeRegister(ADCON_REG, _ADCON); 
-  delay(200);
-  
-  _DRATE = 0b10000010; //100SPS
-  writeRegister(DRATE_REG, _DRATE);  
-  delay(200);
-  
-  sendDirectCommand(0b11110000); //Offset and self-gain calibration
-  delay(200);
-  
+  CSOFF();
   _isAcquisitionRunning = false; //MCU will be waiting to start a continuous acquisition
 }
 
@@ -99,7 +100,7 @@ void ADS1256::stopConversion() //Sending SDATAC to stop the continuous conversio
 {	
 	waitForDRDY(); //SDATAC should be called after DRDY goes LOW (p35. Figure 33)
 	SPI.transfer(0b00001111); //Send SDATAC to the ADC	
-	digitalWrite(_CS_pin, HIGH); //We finished the command sequence, so we switch it back to HIGH
+	CSOFF(); //We finished the command sequence, so we switch it back to HIGH
 	SPI.endTransaction();
 	
 	_isAcquisitionRunning = false; //Reset to false, so the MCU will be able to start a new conversion
@@ -481,13 +482,14 @@ uint8_t ADS1256::readGPIO(uint8_t gpioPin) //Reading GPIO
 void ADS1256::sendDirectCommand(uint8_t directCommand)
 {
   //Direct commands can be found in the datasheet Page 34, Table 24.
-  SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
+  SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
 
-  digitalWrite(_CS_pin, LOW); //REF: P34: "CS must stay low during the entire command sequence"
+  CSON(); //REF: P34: "CS must stay low during the entire command sequence"
   delayMicroseconds(5);
   SPI.transfer(directCommand); //Send Command
   delayMicroseconds(5);
-  digitalWrite(_CS_pin, HIGH); //REF: P34: "CS must stay low during the entire command sequence"
+  CSOFF(); //REF: P34: "CS must stay low during the entire command sequence"
 
   SPI.endTransaction();
 }
@@ -505,20 +507,19 @@ void ADS1256::writeRegister(uint8_t registerAddress, uint8_t registerValueToWrit
 {	
   waitForDRDY();
 
-  SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
+  SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
   //SPI_MODE1 = output edge: rising, data capture: falling; clock polarity: 0, clock phase: 1.
 
-  digitalWrite(_CS_pin, LOW); //CS must stay LOW during the entire sequence [Ref: P34, T24]
+  CSON(); //CS must stay LOW during the entire sequence [Ref: P34, T24]
 
   delayMicroseconds(5); //see t6 in the datasheet
 
-  SPI.transfer(0x50 | registerAddress); // 0x50 = 01010000 = WREG
-
+  SPI.transfer(WREG | registerAddress); // 0x50 = 01010000 = WREG
   SPI.transfer(0x00); //2nd (empty) command byte
-
   SPI.transfer(registerValueToWrite); //pass the value to the register
   
-  digitalWrite(_CS_pin, HIGH);
+  CSOFF();
   SPI.endTransaction();
   delay(100);
   
@@ -528,43 +529,86 @@ long ADS1256::readRegister(uint8_t registerAddress) //Reading a register
 {
    waitForDRDY();
 	
-  SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
+  SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
   //SPI_MODE1 = output edge: rising, data capture: falling; clock polarity: 0, clock phase: 1.
 
-  digitalWrite(_CS_pin, LOW); //CS must stay LOW during the entire sequence [Ref: P34, T24]
+  CSON(); //CS must stay LOW during the entire sequence [Ref: P34, T24]
 
-  SPI.transfer(0x10 | registerAddress); //0x10 = 0001000 = RREG - OR together the two numbers (command + address)
-
+  SPI.transfer(RREG | registerAddress); //0x10 = 0001000 = RREG - OR together the two numbers (command + address)
   SPI.transfer(0x00); //2nd (empty) command byte
 
   delayMicroseconds(5); //see t6 in the datasheet
 
   _registerValuetoRead = SPI.transfer(0xFF); //read out the register value
 
-  digitalWrite(_CS_pin, HIGH);
+  CSOFF();
   SPI.endTransaction();
   delay(100);
   return _registerValuetoRead;
 }
 
-
-long ADS1256::readSingle() //Reading a single value ONCE using the RDATA command 
-{
-	SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
-	digitalWrite(_CS_pin, LOW); //REF: P34: "CS must stay low during the entire command sequence"  
-	waitForDRDY();
-	SPI.transfer(0b00000001); //Issue RDATA (0000 0001) command
-	delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
-
+void ADS1256::read_uint24() {
 	_outputBuffer[0] = SPI.transfer(0); // MSB
 	_outputBuffer[1] = SPI.transfer(0); // Mid-byte
 	_outputBuffer[2] = SPI.transfer(0); // LSB		
 
 	//Shifting and combining the above three items into a single, 24-bit number
 	_outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
-	_outputValue = convertSigned24BitToLong(_outputValue);
+}
+long ADS1256::read_int32() {
+	long val = (unsigned long)_outputValue;
+
+	if (val & 0x00800000) { // if the 24 bit value is negative reflect it to 32bit
+		val |= 0xff000000;
+	}
+
+	return val;
+}
+float ADS1256::read_float32() {
+	long val = read_int32();
+
+	return (float)val;
+}
+
+long ADS1256::readSingle() //Reading a single value ONCE using the RDATA command 
+{
+	SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
+	CSON(); //REF: P34: "CS must stay low during the entire command sequence"  
+	waitForDRDY();
+	SPI.transfer(RDATA); //Issue RDATA (0000 0001) command
+	delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
+
+	read_uint24();
+	_outputValue = read_int32();
 	
-	digitalWrite(_CS_pin, HIGH); //We finished the command sequence, so we set CS to HIGH
+	CSOFF(); //We finished the command sequence, so we set CS to HIGH
+	SPI.endTransaction();
+  
+	return(_outputValue);
+}
+
+long ADS1256::readSingleDifferential(uint8_t differential) //Reading a single value ONCE using the RDATA command 
+{
+	SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
+	
+	CSON(); //REF: P34: "CS must stay low during the entire command sequence"
+	waitForDRDY();
+	SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
+	SPI.transfer(0x00);
+	SPI.transfer(differential);
+	SPI.transfer(SYNC);
+	delayMicroseconds(4);
+	SPI.transfer(WAKEUP);
+	SPI.transfer(RDATA); //Issue RDATA (0000 0001) command
+	delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
+
+	read_uint24();
+	_outputValue = read_int32();
+	CSOFF(); //We finished the command sequence, so we set CS to HIGH
+
 	SPI.endTransaction();
   
 	return(_outputValue);
@@ -575,10 +619,11 @@ long ADS1256::readSingleContinuous() //Reads the recently selected input channel
 	if(_isAcquisitionRunning == false)
 	{
 	  _isAcquisitionRunning = true;
-	  SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
-	  digitalWrite(_CS_pin, LOW); //REF: P34: "CS must stay low during the entire command sequence"	  
+	  SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
+	  CSON(); //REF: P34: "CS must stay low during the entire command sequence"	  
 	  waitForDRDY();
-	  SPI.transfer(0b00000011);  //Issue RDATAC (0000 0011) 
+	  SPI.transfer(RDATAC);  //Issue RDATAC (0000 0011) 
 	  delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.	  
 	}
 	else
@@ -586,14 +631,34 @@ long ADS1256::readSingleContinuous() //Reads the recently selected input channel
 		waitForDRDY();
 	}	
 	
-	_outputBuffer[0] = SPI.transfer(0); // MSB 
-	_outputBuffer[1] = SPI.transfer(0); // Mid-byte
-	_outputBuffer[2] = SPI.transfer(0); // LSB	 
-	
-	_outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
-	_outputValue = convertSigned24BitToLong(_outputValue);	
+	read_uint24();
+	_outputValue = read_int32();	
 	
 	return _outputValue;
+}
+
+float ADS1256::readCurrentChannel(uint8_t differential) {
+	SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
+	
+	CSON(); //REF: P34: "CS must stay low during the entire command sequence"
+	waitForDRDY();
+	SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
+	SPI.transfer(0x00);
+	SPI.transfer(differential);
+	SPI.transfer(SYNC);
+	delayMicroseconds(4);
+	SPI.transfer(WAKEUP);
+	SPI.transfer(RDATA); //Issue RDATA (0000 0001) command
+	delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
+
+	read_uint24();
+	float val = read_float32();
+	CSOFF(); //We finished the command sequence, so we set CS to HIGH
+
+	SPI.endTransaction();
+  
+	return((val / 0x7FFFFF) * ((2 * _VREF) / (float)_PGA)) * _conversationFactor;
 }
 
 long ADS1256::cycleSingle()
@@ -602,14 +667,15 @@ long ADS1256::cycleSingle()
 	{
 	  _isAcquisitionRunning = true;
 	  _cycle = 0;
-	  SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
-	  digitalWrite(_CS_pin, LOW); //CS must stay LOW during the entire sequence [Ref: P34, T24]
-	  SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+	  SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
+	  CSON(); //CS must stay LOW during the entire sequence [Ref: P34, T24]
+	  SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
       SPI.transfer(0x00);
       SPI.transfer(SING_0); //AIN0+AINCOM
-	  digitalWrite(_CS_pin, HIGH);			
+	  CSOFF();			
 	  delay(50);
-	  digitalWrite(_CS_pin, LOW); //CS must stay LOW during the entire sequence [Ref: P34, T24]
+	  CSON(); //CS must stay LOW during the entire sequence [Ref: P34, T24]
 	}
 	else
 	{}
@@ -623,61 +689,61 @@ long ADS1256::cycleSingle()
       {
         //Channels are written manually
         case 0: //Channel 2
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(SING_1);  //AIN1+AINCOM
           break;
 
         case 1: //Channel 3
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(SING_2);  //AIN2+AINCOM
           break;
 
         case 2: //Channel 4
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(SING_3);  //AIN3+AINCOM
           break;
 
         case 3: //Channel 5
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(SING_4);  //AIN4+AINCOM
           break;
 
         case 4: //Channel 6
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(SING_5);  //AIN5+AINCOM
           break;
 
         case 5: //Channel 7
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(SING_6);  //AIN6+AINCOM
           break;
 
         case 6: //Channel 8
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(SING_7);  //AIN7+AINCOM
           break;
 
         case 7: //Channel 1
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(SING_0); //AIN0+AINCOM
           break;
       }
       //Step 2.
-      SPI.transfer(0b11111100); //SYNC
+      SPI.transfer(SYNC); //SYNC
       delayMicroseconds(4); //t11 delay 24*tau = 3.125 us //delay should be larger, so we delay by 4 us
-      SPI.transfer(0b11111111); //WAKEUP
+      SPI.transfer(WAKEUP); //WAKEUP
 
       //Step 3.
       //Issue RDATA (0000 0001) command
-      SPI.transfer(0b00000001);
+      SPI.transfer(RDATA);
       delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
 
 	  _outputBuffer[0] = SPI.transfer(0x0F); // MSB 
@@ -703,16 +769,17 @@ long ADS1256::cycleDifferential()
 	{
 	  _cycle = 0;
 	  _isAcquisitionRunning = true;
-	  SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
+	  SPI.beginTransaction(
+		SPISettings(_spiClockMhz * 1000000 / 4, MSBFIRST, SPI_MODE1));
 	  
 	  //Set the AIN0+AIN1 as inputs manually
-	  digitalWrite(_CS_pin, LOW); //CS must stay LOW during the entire sequence [Ref: P34, T24]
-	  SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+	  CSON(); //CS must stay LOW during the entire sequence [Ref: P34, T24]
+	  SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
 	  SPI.transfer(0x00);
 	  SPI.transfer(DIFF_0_1);  //AIN0+AIN1
-	  digitalWrite(_CS_pin, HIGH);	  
+	  CSOFF();	  
 	  delay(50);
-	  digitalWrite(_CS_pin, LOW); //CS must stay LOW during the entire sequence [Ref: P34, T24]
+	  CSON(); //CS must stay LOW during the entire sequence [Ref: P34, T24]
 	}
 	else
 	{}
@@ -727,45 +794,40 @@ long ADS1256::cycleDifferential()
       switch (_cycle)
       {
         case 0: //Channel 2
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(DIFF_2_3);  //AIN2+AIN3
           break;
 
         case 1: //Channel 3
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(DIFF_4_5); //AIN4+AIN5
           break;
 
         case 2: //Channel 4
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(DIFF_6_7); //AIN6+AIN7
           break;
 
         case 3: //Channel 1
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
+          SPI.transfer(WREG | 1); // 0x50 = WREG //1 = MUX
           SPI.transfer(0x00);
           SPI.transfer(DIFF_0_1); //AIN0+AIN1
           break;
       }
 
-      SPI.transfer(0b11111100); //SYNC
+      SPI.transfer(SYNC); //SYNC
       delayMicroseconds(4); //t11 delay 24*tau = 3.125 us //delay should be larger, so we delay by 4 us
-      SPI.transfer(0b11111111); //WAKEUP
+      SPI.transfer(WAKEUP); //WAKEUP
 
       //Step 3.
-      SPI.transfer(0b00000001); //Issue RDATA (0000 0001) command
+      SPI.transfer(RDATA); //Issue RDATA (0000 0001) command
       delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
 
 	
-	  _outputBuffer[0] = SPI.transfer(0); // MSB 
-	  _outputBuffer[1] = SPI.transfer(0); // Mid-byte
-	  _outputBuffer[2] = SPI.transfer(0); // LSB
-		
-	  _outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
-	  _outputValue = convertSigned24BitToLong(_outputValue);
+	  _outputValue = read_int32();
 		
 	  _cycle++;
 	  if(_cycle == 4)
@@ -778,5 +840,14 @@ long ADS1256::cycleDifferential()
 	return _outputValue;
 }
 
+void ADS1256::CSON() {
+	digitalWrite(_CS_pin, LOW);
+}
 
+void ADS1256::CSOFF() {
+	digitalWrite(_CS_pin, HIGH);
+}
 
+void ADS1256::setConversationFactor(float val) {
+	_conversationFactor = val;
+}
