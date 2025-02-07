@@ -166,11 +166,11 @@ public:
 	void stopConversion();
 
 	void setConversionFactor(float val);
+	void waitForDRDY();
 	
 private:
 void CSON();
 void CSOFF();
-void waitForDRDY(); // Block until DRDY is low
 void read_uint24();
 long read_int32();
 float read_float32();
