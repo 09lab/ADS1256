@@ -165,7 +165,7 @@ public:
 	//Stop AD
 	void stopConversion();
 
-	void setConversationFactor(float val);
+	void setConversionFactor(float val);
 	
 private:
 void CSON();

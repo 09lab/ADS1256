@@ -848,6 +848,6 @@ void ADS1256::CSOFF() {
 	digitalWrite(_CS_pin, HIGH);
 }
 
-void ADS1256::setConversationFactor(float val) {
+void ADS1256::setConversionFactor(float val) {
 	_conversionFactor = val;
 }
