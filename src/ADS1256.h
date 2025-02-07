@@ -198,7 +198,7 @@ byte _GPIO; //Value of the GPIO register
 byte _STATUS; //Value of the status register
 byte _GPIOvalue; //GPIO value
 byte _ByteOrder; //Byte order
-float _conversationFactor;
+float _conversionFactor;
 
 byte _outputBuffer[3]; //3-byte (24-bit) buffer for the fast acquisition - Single-channel, continuous
 long _outputValue; //Combined value of the _outputBuffer[3]
