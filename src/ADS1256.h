@@ -1,4 +1,4 @@
-//ADS1256 header file
+// ADS1256 header file
 /*
  Name:		ADS1256.h
  Created:	2022/07/14
@@ -12,6 +12,7 @@
 
 #ifndef _ADS1256_h
 #define _ADS1256_h
+#include "Arduino.h"
 
 //Differential inputs
 #define DIFF_0_1 0b00000001 //A0 + A1 as differential input
@@ -28,6 +29,15 @@
 #define SING_5 0b01011111 //A5 + GND (common) as single-ended input
 #define SING_6 0b01101111 //A6 + GND (common) as single-ended input
 #define SING_7 0b01111111 //A7 + GND (common) as single-ended input
+
+// define gain codes
+#define ADS1256_GAIN_1 0x00
+#define ADS1256_GAIN_2 0x01
+#define ADS1256_GAIN_4 0x02
+#define ADS1256_GAIN_8 0x03
+#define ADS1256_GAIN_16 0x04
+#define ADS1256_GAIN_32 0x05
+#define ADS1256_GAIN_64 0x06
 
 //PGA settings			  //Input voltage range
 #define PGA_1 0b00000000  //± 5 V
@@ -100,12 +110,13 @@ class ADS1256
 public:
 
 	//Constructor
-	ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin, const byte CS_pin, float VREF);
+	ADS1256(float VREF, const byte DRDY_pin, const byte CS_pin,const byte SCK_pin, const byte MISO_pin, const byte MOSI_pin);
 	
 	//Initializing function
-	void InitializeADC();	
+	void InitializeADC();
+	void InitializeADC(uint8_t drate, uint8_t gain, bool buff_enable);
 	//ADS1256(int drate, int pga, int byteOrder, bool bufen);
-	
+	void InitSPI(float clockspdMhz);
 	//Read a register
 	long readRegister(uint8_t registerAddress);
 	
@@ -141,23 +152,37 @@ public:
 	
 	//Cycling through the differential inputs
 	long cycleDifferential(); //Ax + Ay
-		
+
+	// Get a single conversion with channel
+	long readSingleDifferential(uint8_t differential);
+
+	//
+	float readCurrentChannel(uint8_t differential);
+
 	//Converts the reading into a voltage value
 	float convertToVoltage(int32_t rawData);
 		
 	//Stop AD
 	void stopConversion();
+
+	void setConversionFactor(float val);
+	void waitForDRDY();
 	
 private:
-
-void waitForDRDY(); // Block until DRDY is low
+void CSON();
+void CSOFF();
+void read_uint24();
+long read_int32();
+float read_float32();
 
 float _VREF; //Value of the reference voltage
+float _spiClockMhz;
 //Pins
 byte _DRDY_pin; //Pin assigned for DRDY
-byte _RESET_pin; //Pin assigned for RESET
-byte _SYNC_pin; //Pin assigned for SYNC
 byte _CS_pin; //Pin assigned for CS
+byte _SCK_pin;
+byte _MISO_pin;
+byte _MOSI_pin;
 
 //Register-related variables
 uint8_t _registerAddress; //Value holding the address of the register we want to manipulate
@@ -173,6 +198,7 @@ byte _GPIO; //Value of the GPIO register
 byte _STATUS; //Value of the status register
 byte _GPIOvalue; //GPIO value
 byte _ByteOrder; //Byte order
+float _conversionFactor;
 
 byte _outputBuffer[3]; //3-byte (24-bit) buffer for the fast acquisition - Single-channel, continuous
 long _outputValue; //Combined value of the _outputBuffer[3]
