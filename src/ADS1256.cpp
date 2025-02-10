@@ -30,7 +30,7 @@ ADS1256::ADS1256(float VREF, const byte DRDY_pin, const byte CS_pin,const byte S
 	_MOSI_pin = MOSI_pin;
 	
 	_VREF = VREF;
-	_conversationFactor = 1.0;
+	_conversionFactor = 1.0;
 }
 	
 void ADS1256::InitSPI(float clockspdMhz) {
@@ -658,7 +658,7 @@ float ADS1256::readCurrentChannel(uint8_t differential) {
 
 	SPI.endTransaction();
   
-	return((val / 0x7FFFFF) * ((2 * _VREF) / (float)_PGA)) * _conversationFactor;
+	return((val / 0x7FFFFF) * ((2 * _VREF) / (float)_PGA)) * _conversionFactor;
 }
 
 long ADS1256::cycleSingle()
@@ -848,6 +848,6 @@ void ADS1256::CSOFF() {
 	digitalWrite(_CS_pin, HIGH);
 }
 
-void ADS1256::setConversationFactor(float val) {
-	_conversationFactor = val;
+void ADS1256::setConversionFactor(float val) {
+	_conversionFactor = val;
 }

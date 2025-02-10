@@ -30,6 +30,15 @@
 #define SING_6 0b01101111 //A6 + GND (common) as single-ended input
 #define SING_7 0b01111111 //A7 + GND (common) as single-ended input
 
+// define gain codes
+#define ADS1256_GAIN_1 0x00
+#define ADS1256_GAIN_2 0x01
+#define ADS1256_GAIN_4 0x02
+#define ADS1256_GAIN_8 0x03
+#define ADS1256_GAIN_16 0x04
+#define ADS1256_GAIN_32 0x05
+#define ADS1256_GAIN_64 0x06
+
 //PGA settings			  //Input voltage range
 #define PGA_1 0b00000000  //± 5 V
 #define PGA_2 0b00000001  //± 2.5 V
@@ -156,12 +165,12 @@ public:
 	//Stop AD
 	void stopConversion();
 
-	void setConversationFactor(float val);
+	void setConversionFactor(float val);
+	void waitForDRDY();
 	
 private:
 void CSON();
 void CSOFF();
-void waitForDRDY(); // Block until DRDY is low
 void read_uint24();
 long read_int32();
 float read_float32();
@@ -189,7 +198,7 @@ byte _GPIO; //Value of the GPIO register
 byte _STATUS; //Value of the status register
 byte _GPIOvalue; //GPIO value
 byte _ByteOrder; //Byte order
-float _conversationFactor;
+float _conversionFactor;
 
 byte _outputBuffer[3]; //3-byte (24-bit) buffer for the fast acquisition - Single-channel, continuous
 long _outputValue; //Combined value of the _outputBuffer[3]
