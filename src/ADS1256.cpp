@@ -826,7 +826,7 @@ long ADS1256::cycleDifferential()
       SPI.transfer(RDATA); //Issue RDATA (0000 0001) command
       delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
 
-	
+	  read_uint24();
 	  _outputValue = read_int32();
 		
 	  _cycle++;

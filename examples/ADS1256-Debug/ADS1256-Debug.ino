@@ -4,8 +4,7 @@
 #include <ADS1256.h>
 
 //Below a few examples of pin descriptions for different microcontrollers I used:
-//ADS1256 A(2, 0, 8, 10, 2.500); //DRDY, RESET, SYNC(PDWN), CS, VREF(float).    //Arduino Nano
-ADS1256 A(2.5, 25, 26, 23, 33, 32); //DRDY, RESET, SYNC(PDWN), CS, VREF(float).      //ATmega32U4 
+ADS1256 A(2.5, 25, 26, 23, 33, 32); //VREF, DRDY, CS, SCK, MISO, MOSI.
 
 long rawConversion = 0; //24-bit raw value
 float voltageValue = 0; //human-readable floating point value
@@ -71,7 +70,7 @@ void setup()
   Serial.println("ADS1256 - Custom Library Demo File by Curious Scientist - 2023-11-10");
 
   A.InitSPI(7.68);
-  A.InitializeADC(DRATE_1000SPS, 0x06, false);
+  A.InitializeADC(DRATE_2000SPS, 0x06, false);
 }
 
 void loop()
@@ -81,20 +80,20 @@ void loop()
   data = A.readCurrentChannel(DIFF_0_1);
   Serial.print("Channel : 1");
   Serial.print("/ Voltage : ");
-  Serial.println(data);
+  Serial.print(data);
   delay(100);
-  data = A.readSingleDifferential(DIFF_2_3);
-  Serial.print("Channel : 2");
+  data = A.readCurrentChannel(DIFF_2_3);
+  Serial.print(" | Channel : 2");
   Serial.print("/ Voltage : ");
   Serial.println(data);
   delay(100);
-  data = A.readSingleDifferential(DIFF_4_5);
-  Serial.print("Channel : 3");
+  data = A.readCurrentChannel(DIFF_4_5);
+  Serial.print(" | Channel : 3");
   Serial.print("/ Voltage : ");
-  Serial.println(data);
+  Serial.print(data);
   delay(100);
-  data = A.readSingleDifferential(DIFF_6_7);
-  Serial.print("Channel : 4");
+  data = A.readCurrentChannel(DIFF_6_7);
+  Serial.print(" | Channel : 4");
   Serial.print("/ Voltage : ");
   Serial.println(data);
   delay(100);

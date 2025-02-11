@@ -4,12 +4,7 @@
 #include <ADS1256.h>
 
 //Below a few examples of pin descriptions for different microcontrollers I used:
-//ADS1256 A(2, 0, 8, 10, 2.500); //DRDY, RESET, SYNC(PDWN), CS, VREF(float).    //Arduino Nano
-ADS1256 A(7, 10, 5, 9, 2.500); //DRDY, RESET, SYNC(PDWN), CS, VREF(float).      //ATmega32U4 
-//ADS1256 A(PA2, 0, 0, PA4, 2.500); //DRDY, RESET, SYNC(PDWN), CS, VREF(float). //STM32 blue pill
-//ADS1256 A(16, 17, 0, 5, 2.500); //DRDY, RESET, SYNC(PDWN), CS, VREF(float).   //ESP32 WROOM 32
-//ADS1256 A(7, 0, 8, 10, 2.500); //DRDY, RESET, SYNC(PDWN), CS, VREF(float).    //Teensy 4.0
-//ADS1256 A(7, 0, 6, 5, 2.500); //DRDY, RESET, SYNC(PDWN), CS, VREF(float).    //RP2040 Waveshare Mini
+ADS1256 A(2.5, 25, 26, 23, 33, 32); //VREF, DRDY, CS, SCK, MISO, MOSI.
 
 long rawConversion = 0; //24-bit raw value
 float voltageValue = 0; //human-readable floating point value
@@ -74,10 +69,8 @@ void setup()
 
   Serial.println("ADS1256 - Custom Library Demo File by Curious Scientist - 2023-11-10");
 
-  A.InitializeADC(); //See the documentation for every details
-  //Setting up CS, RESET, SYNC and SPI
-  //Assigning default values to: STATUS, MUX, ADCON, DRATE
-  //Performing a SYSCAL
+  A.InitSPI(7.68);
+  A.InitializeADC(DRATE_2000SPS, 0x06, false);
 
   //Below is a demonstration to change the values through the built-on functions of the library
   //Set a PGA value
