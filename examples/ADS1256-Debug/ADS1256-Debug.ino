@@ -77,7 +77,6 @@ void loop()
 {
   float data;
 
-  data = A.readCurrentChannel(DIFF_0_1); // To clear buffer
   data = A.readCurrentChannel(DIFF_0_1);
   Serial.print("Channel : 1");
   Serial.print("/ Raw value : ");
