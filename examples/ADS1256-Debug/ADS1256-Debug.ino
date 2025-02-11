@@ -75,26 +75,39 @@ void setup()
 
 void loop()
 {
-  float data;
+  float data[4];
+  float result[4] = {0,0,0,0};
 
-  data = A.readCurrentChannel(DIFF_0_1);
-  Serial.print("Channel : 1");
-  Serial.print("/ Raw value : ");
-  Serial.print(data,8);
-  delay(100);
-  data = A.readCurrentChannel(DIFF_2_3);
-  Serial.print(" | Channel : 2");
-  Serial.print("/ Raw value : ");
-  Serial.print(data,8);
-  delay(100);
-  data = A.readCurrentChannel(DIFF_4_5);
-  Serial.print(" | Channel : 3");
-  Serial.print("/ Raw value : ");
-  Serial.print(data,8);
-  delay(100);
-  data = A.readCurrentChannel(DIFF_6_7);
-  Serial.print(" | Channel : 4");
-  Serial.print("/ Raw value : ");
-  Serial.println(data,8);
-  delay(100);
+  for(int i = 0 ; i < 1000 ; i++) {
+    data[0] = A.readCurrentChannel(DIFF_0_1);
+    result[0] += data[0];
+  }
+  result[0] = result[0] / 1000;
+  Serial.print("Differential 1 : ");
+  Serial.print(result[0] * 200000.0,8);
+
+  for(int i = 0 ; i < 1000 ; i++) {
+    data[1] = A.readCurrentChannel(DIFF_2_3);
+    result[1] += data[1];
+  }
+  result[1] = result[1] / 1000;
+  Serial.print("  |   Differential 2 : ");
+  Serial.print(result[1]*20000.0 - 10.0,8);
+
+  for(int i = 0 ; i < 1000 ; i++) {
+    data[2] = A.readCurrentChannel(DIFF_4_5);
+    result[2] += data[2];
+  }
+  result[2] = result[2] / 1000;
+  Serial.print("  |  Differential 3 : ");
+  Serial.print(result[2]*20000.0 - 10,8);
+
+  for(int i = 0 ; i < 1000 ; i++) {
+    data[3] = A.readCurrentChannel(DIFF_6_7);
+    result[3] += data[3];
+  }
+  result[3] = result[3] / 1000;
+  Serial.print("  |  Differential 4 : ");
+  Serial.println(result[3] * 20000.0 - 10,8);
+  delay(500);
 }
