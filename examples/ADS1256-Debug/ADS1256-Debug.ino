@@ -77,24 +77,25 @@ void loop()
 {
   float data;
 
+  data = A.readCurrentChannel(DIFF_0_1); // To clear buffer
   data = A.readCurrentChannel(DIFF_0_1);
   Serial.print("Channel : 1");
-  Serial.print("/ Voltage : ");
-  Serial.print(data);
+  Serial.print("/ Raw value : ");
+  Serial.print(data,8);
   delay(100);
   data = A.readCurrentChannel(DIFF_2_3);
   Serial.print(" | Channel : 2");
-  Serial.print("/ Voltage : ");
-  Serial.println(data);
+  Serial.print("/ Raw value : ");
+  Serial.print(data,8);
   delay(100);
   data = A.readCurrentChannel(DIFF_4_5);
   Serial.print(" | Channel : 3");
-  Serial.print("/ Voltage : ");
-  Serial.print(data);
+  Serial.print("/ Raw value : ");
+  Serial.print(data,8);
   delay(100);
   data = A.readCurrentChannel(DIFF_6_7);
   Serial.print(" | Channel : 4");
-  Serial.print("/ Voltage : ");
-  Serial.println(data);
+  Serial.print("/ Raw value : ");
+  Serial.println(data,8);
   delay(100);
 }
